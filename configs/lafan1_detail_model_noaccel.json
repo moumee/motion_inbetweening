@@ -1,5 +1,5 @@
 {
-    "name": "lafan1_detail_model_accel",
+    "name": "lafan1_detail_model_noaccel",
     "workspace": "..\\experiments\\{name}",
     "datasets": {
         "train": {
@@ -108,7 +108,7 @@
         "sw": 0.005,
         "dw": 0.0,
         "fw": 0.05,
-        "aw": 0.001
+        "aw": 0
     },
     "visdom": {
         "env": "Motion Inbetween - {name}",

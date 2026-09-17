@@ -241,10 +241,16 @@ def train(config, context_config):
     r_loss_avg = 0
     c_loss_avg = 0
     f_loss_avg = 0
-    # added acceleration loss
-    a_loss_avg = 0
+    # Added velocity loss
+    v_loss_avg = 0
 
     min_val_loss = float("inf")
+
+    total_iterations = config["train"].get("total_iterations", 0)
+
+    if total_iterations > 0 and iteration > total_iterations:
+        print("Target iterations already reached.")
+        return
 
     while epoch < config["train"]["total_epoch"]:
         for i, data in enumerate(data_loader, 0):
@@ -321,24 +327,22 @@ def train(config, context_config):
             c_loss = train_utils.cal_c_loss(
                 foot_contact, c_out, seq_slice)
             f_loss = train_utils.cal_f_loss(gpos_new, c_out, seq_slice)
-            
-            
 
             # loss
             loss = (
                 config["weights"]["rw"] * r_loss +
                 config["weights"]["pw"] * p_loss +
                 config["weights"]["cw"] * c_loss +
-                config["weights"]["fw"] * f_loss 
+                config["weights"]["fw"] * f_loss
             )
-            
-            aw = config["weights"].get("aw", 0.0)
-            a_loss = loss.new_zeros(())
-            
-            if aw != 0:
-                a_loss = train_utils.cal_a_loss(
+
+            vw = config["weights"].get("vw", 0.0)
+            v_loss = loss.new_zeros(())
+
+            if vw != 0:
+                a_loss = train_utils.cal_v_loss(
                     global_positions, gpos_new, seq_slice)
-                loss = loss + aw * a_loss
+                loss = loss + vw * v_loss
 
             loss.backward()
             optimizer.step()
@@ -387,7 +391,7 @@ def train(config, context_config):
                     ["loss weighted", "f_loss",
                         f_loss_avg * config["weights"]["fw"]],
                     ["loss weighted", "a_loss",
-                        a_loss_avg * config["weights"]["aw"]],
+                        a_loss_avg * aw],
                     ["loss weighted", "loss", loss_avg],
                     ["learning rate", "lr", lr],
                     ["epoch", "epoch", epoch],
@@ -439,6 +443,16 @@ def train(config, context_config):
                 a_loss_avg = 0
                 loss_avg = 0
                 info_idx += 1
+
+            # Added total iteration bound
+
+            if total_iterations > 0 and iteration >= total_iterations:
+                train_utils.save_checkpoint(
+                    config, detail_model, epoch, iteration,
+                    optimizer, scheduler
+                )
+                print(f"Training finished at iteration {iteration}.")
+                return
 
             iteration += 1
 
