@@ -340,7 +340,7 @@ def train(config, context_config):
             v_loss = loss.new_zeros(())
 
             if vw != 0:
-                a_loss = train_utils.cal_v_loss(
+                v_loss = train_utils.cal_v_loss(
                     global_positions, gpos_new, seq_slice)
                 loss = loss + vw * v_loss
 
@@ -352,7 +352,7 @@ def train(config, context_config):
             p_loss_avg += p_loss.item()
             c_loss_avg += c_loss.item()
             f_loss_avg += f_loss.item()
-            a_loss_avg += a_loss.item()
+            v_loss_avg += v_loss.item()
             loss_avg += loss.item()
 
             if iteration % config["train"]["checkpoint_interval"] == 0:
@@ -365,22 +365,22 @@ def train(config, context_config):
                 p_loss_avg /= info_interval
                 c_loss_avg /= info_interval
                 f_loss_avg /= info_interval
-                a_loss_avg /= info_interval
+                v_loss_avg /= info_interval
                 loss_avg /= info_interval
                 lr = optimizer.param_groups[0]["lr"]
 
                 print("Epoch: {}, Iteration: {}, lr: {:.8f}, dropout: {:.6f}, "
                       "loss: {:.6f}, r: {:.6f}, p: {:.6f}, c: {:.6f}, "
-                      "f: {:.6f}, a {:.6f}".format(
+                      "f: {:.6f}, v: {:.6f}".format(
                           epoch, iteration, lr, detail_model.dropout, loss_avg,
-                          r_loss_avg, p_loss_avg, c_loss_avg, f_loss_avg, a_loss_avg))
+                          r_loss_avg, p_loss_avg, c_loss_avg, f_loss_avg, v_loss_avg))
 
                 contents = [
                     ["loss", "r_loss", r_loss_avg],
                     ["loss", "p_loss", p_loss_avg],
                     ["loss", "c_loss", c_loss_avg],
                     ["loss", "f_loss", f_loss_avg],
-                    ["loss", "a_loss", a_loss_avg],
+                    ["loss", "v_loss", v_loss_avg],
                     ["dropout", "p", detail_model.dropout],
                     ["loss weighted", "r_loss",
                         r_loss_avg * config["weights"]["rw"]],
@@ -390,8 +390,8 @@ def train(config, context_config):
                         c_loss_avg * config["weights"]["cw"]],
                     ["loss weighted", "f_loss",
                         f_loss_avg * config["weights"]["fw"]],
-                    ["loss weighted", "a_loss",
-                        a_loss_avg * aw],
+                    ["loss weighted", "v_loss",
+                        v_loss_avg * vw],
                     ["loss weighted", "loss", loss_avg],
                     ["learning rate", "lr", lr],
                     ["epoch", "epoch", epoch],
@@ -440,7 +440,7 @@ def train(config, context_config):
                 p_loss_avg = 0
                 c_loss_avg = 0
                 f_loss_avg = 0
-                a_loss_avg = 0
+                v_loss_avg = 0
                 loss_avg = 0
                 info_idx += 1
 
