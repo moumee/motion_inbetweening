@@ -184,6 +184,9 @@ def update_dropout_p(model, iteration, config):
 
 
 def train(config, context_config):
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+
     indices = config["indices"]
     info_interval = config["visdom"]["interval"]
     eval_interval = config["visdom"]["interval_eval"]
@@ -241,9 +244,7 @@ def train(config, context_config):
     r_loss_avg = 0
     c_loss_avg = 0
     f_loss_avg = 0
-    # Added velocity loss
-    v_loss_avg = 0
-
+    gr_loss_avg = 0
     min_val_loss = float("inf")
 
     total_iterations = config["train"].get("total_iterations", 0)
@@ -260,7 +261,7 @@ def train(config, context_config):
 
             positions, rotations = data_utils.to_start_centered_data(
                 positions, rotations, context_len)
-            global_rotations, global_positions = data_utils.fk_torch(
+            _, global_positions = data_utils.fk_torch(
                 rotations, positions, parents)
 
             # randomize transition length
@@ -286,10 +287,17 @@ def train(config, context_config):
                 device, dtype, midway_targets=midway_targets)
 
             # get context model output
-            pos_ctx, rot_ctx = ctx_mdl.evaluate(
-                context_model, positions, rotations, seq_slice,
-                indices, mean_ctx, std_ctx, atten_mask_ctx,
-                post_process=True, midway_targets=midway_targets)
+            # pos_ctx, rot_ctx = ctx_mdl.evaluate(
+            #     context_model, positions, rotations, seq_slice,
+            #     indices, mean_ctx, std_ctx, atten_mask_ctx,
+            #     post_process=True, midway_targets=midway_targets)
+            
+            # get context model output (frozen — no grad needed)
+            with torch.no_grad():
+                pos_ctx, rot_ctx = ctx_mdl.evaluate(
+                    context_model, positions, rotations, seq_slice,
+                    indices, mean_ctx, std_ctx, atten_mask_ctx,
+                    post_process=True, midway_targets=midway_targets)
 
             # detail model inputs
             state_gt, delta_gt = get_model_input(positions, rotations)
@@ -326,23 +334,19 @@ def train(config, context_config):
                 global_positions, gpos_new, seq_slice)
             c_loss = train_utils.cal_c_loss(
                 foot_contact, c_out, seq_slice)
-            f_loss = train_utils.cal_f_loss(gpos_new, c_out, seq_slice)
+            f_loss = train_utils.cal_f_loss(
+                gpos_new, c_out, seq_slice)
+            gr_loss = train_utils.cal_gr_loss(
+                global_rotations, grot_new, seq_slice)
 
             # loss
             loss = (
                 config["weights"]["rw"] * r_loss +
                 config["weights"]["pw"] * p_loss +
                 config["weights"]["cw"] * c_loss +
-                config["weights"]["fw"] * f_loss
+                config["weights"]["fw"] * f_loss +
+                config["weights"]["grw"] * gr_loss
             )
-
-            vw = config["weights"].get("vw", 0.0)
-            v_loss = loss.new_zeros(())
-
-            if vw != 0:
-                v_loss = train_utils.cal_v_loss(
-                    global_positions, gpos_new, seq_slice)
-                loss = loss + vw * v_loss
 
             loss.backward()
             optimizer.step()
@@ -352,7 +356,7 @@ def train(config, context_config):
             p_loss_avg += p_loss.item()
             c_loss_avg += c_loss.item()
             f_loss_avg += f_loss.item()
-            v_loss_avg += v_loss.item()
+            gr_loss_avg += gr_loss.item()
             loss_avg += loss.item()
 
             if iteration % config["train"]["checkpoint_interval"] == 0:
@@ -365,22 +369,23 @@ def train(config, context_config):
                 p_loss_avg /= info_interval
                 c_loss_avg /= info_interval
                 f_loss_avg /= info_interval
-                v_loss_avg /= info_interval
+                gr_loss_avg /= info_interval
                 loss_avg /= info_interval
                 lr = optimizer.param_groups[0]["lr"]
 
                 print("Epoch: {}, Iteration: {}, lr: {:.8f}, dropout: {:.6f}, "
                       "loss: {:.6f}, r: {:.6f}, p: {:.6f}, c: {:.6f}, "
-                      "f: {:.6f}, v: {:.6f}".format(
+                      "f: {:.6f}, gr: {:.6f}".format(     # gr 추가
                           epoch, iteration, lr, detail_model.dropout, loss_avg,
-                          r_loss_avg, p_loss_avg, c_loss_avg, f_loss_avg, v_loss_avg))
+                          r_loss_avg, p_loss_avg, c_loss_avg, f_loss_avg,
+                          gr_loss_avg))
 
                 contents = [
                     ["loss", "r_loss", r_loss_avg],
                     ["loss", "p_loss", p_loss_avg],
                     ["loss", "c_loss", c_loss_avg],
                     ["loss", "f_loss", f_loss_avg],
-                    ["loss", "v_loss", v_loss_avg],
+                    ["loss", "gr_loss", gr_loss_avg],
                     ["dropout", "p", detail_model.dropout],
                     ["loss weighted", "r_loss",
                         r_loss_avg * config["weights"]["rw"]],
@@ -390,8 +395,8 @@ def train(config, context_config):
                         c_loss_avg * config["weights"]["cw"]],
                     ["loss weighted", "f_loss",
                         f_loss_avg * config["weights"]["fw"]],
-                    ["loss weighted", "v_loss",
-                        v_loss_avg * vw],
+                    ["loss weighted", "gr_loss",
+                        gr_loss_avg * config["weights"]["grw"]],
                     ["loss weighted", "loss", loss_avg],
                     ["learning rate", "lr", lr],
                     ["epoch", "epoch", epoch],
@@ -440,7 +445,7 @@ def train(config, context_config):
                 p_loss_avg = 0
                 c_loss_avg = 0
                 f_loss_avg = 0
-                v_loss_avg = 0
+                gr_loss_avg = 0
                 loss_avg = 0
                 info_idx += 1
 

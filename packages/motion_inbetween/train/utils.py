@@ -184,28 +184,14 @@ def cal_f_loss(gpos_out, c_out, seq_slice):
     # l1 loss
     return torch.mean(torch.abs(delta))
 
-# Added velocity loss
-
-
-def cal_v_loss(global_positions, new_global_positions, seq_slice,
-               weights=None):
-    # l1 loss
-    prev_slice = slice(seq_slice.start - 1, seq_slice.stop)
-    cur_slice = slice(seq_slice.start, seq_slice.stop + 1)
-    gt_vel = (global_positions[..., cur_slice, :, :]
-              - global_positions[..., prev_slice, :, :])
-
-    pred_vel = (new_global_positions[..., cur_slice, :, :]
-                - new_global_positions[..., prev_slice, :, :])
-
-    delta = pred_vel - gt_vel
-
+def cal_gr_loss(grot_gt, grot_out, seq_slice, weights=None):
+    # grot: (batch, seq, joint, 3, 3)
+    a = data_utils.matrix9D_to_6D_torch(grot_gt[..., seq_slice, :, :, :])
+    b = data_utils.matrix9D_to_6D_torch(grot_out[..., seq_slice, :, :, :])
+    delta = a - b
     if weights is not None:
         delta = delta * weights[..., None, None]
-
-    # omitted time division since the fps is constant
     return torch.mean(torch.abs(delta))
-
 
 def get_new_positions(positions, y, indices, seq_slice=slice(None, None)):
     p_slice = slice(indices["p_start_idx"], indices["p_end_idx"])

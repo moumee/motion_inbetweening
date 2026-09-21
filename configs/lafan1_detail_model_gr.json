@@ -1,5 +1,5 @@
 {
-    "name": "lafan1_detail_model_accel",
+    "name": "lafan1_detail_model_gr",
     "workspace": "..\\experiments\\{name}",
     "datasets": {
         "train": {
@@ -60,7 +60,8 @@
     "train": {
         "checkpoint": "checkpoint_{name}.pth",
         "checkpoint_interval": 1000,
-        "total_epoch": 115,
+        "total_epoch": 2000,
+        "total_iterations": 1430000,
         "batch_size": 32,
         "lr": 0.025,
         "lr_warmup_iterations": 8000,
@@ -108,7 +109,7 @@
         "sw": 0.005,
         "dw": 0.0,
         "fw": 0.05,
-        "aw": 0.001
+        "grw": 0.05
     },
     "visdom": {
         "env": "Motion Inbetween - {name}",
