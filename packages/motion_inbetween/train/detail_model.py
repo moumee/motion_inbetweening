@@ -261,7 +261,7 @@ def train(config, context_config):
 
             positions, rotations = data_utils.to_start_centered_data(
                 positions, rotations, context_len)
-            _, global_positions = data_utils.fk_torch(
+            global_rotations, global_positions = data_utils.fk_torch(
                 rotations, positions, parents)
 
             # randomize transition length
@@ -291,7 +291,7 @@ def train(config, context_config):
             #     context_model, positions, rotations, seq_slice,
             #     indices, mean_ctx, std_ctx, atten_mask_ctx,
             #     post_process=True, midway_targets=midway_targets)
-            
+
             # get context model output (frozen — no grad needed)
             with torch.no_grad():
                 pos_ctx, rot_ctx = ctx_mdl.evaluate(
