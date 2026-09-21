@@ -184,6 +184,14 @@ def cal_f_loss(gpos_out, c_out, seq_slice):
     # l1 loss
     return torch.mean(torch.abs(delta))
 
+def cal_gr_loss(grot_gt, grot_out, seq_slice, weights=None):
+    # grot: (batch, seq, joint, 3, 3)
+    a = data_utils.matrix9D_to_6D_torch(grot_gt[..., seq_slice, :, :, :])
+    b = data_utils.matrix9D_to_6D_torch(grot_out[..., seq_slice, :, :, :])
+    delta = a - b
+    if weights is not None:
+        delta = delta * weights[..., None, None]
+    return torch.mean(torch.abs(delta))
 
 def get_new_positions(positions, y, indices, seq_slice=slice(None, None)):
     p_slice = slice(indices["p_start_idx"], indices["p_end_idx"])
