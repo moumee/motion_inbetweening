@@ -125,13 +125,48 @@ def get_noam_lr_scheduler(config, optimizer):
 
 
 def cal_r_loss(x, y, seq_slice, indices, weights=None):
+    # dim_slice = slice(indices["r_start_idx"], indices["r_end_idx"])
+
+    # # l1 loss
+    # delta = x[..., seq_slice, dim_slice] - y[..., seq_slice, dim_slice]
+    # if weights is not None:
+    #     delta = delta * weights[..., None]
+    # return torch.mean(torch.abs(delta))
     dim_slice = slice(indices["r_start_idx"], indices["r_end_idx"])
 
-    # l1 loss
-    delta = x[..., seq_slice, dim_slice] - y[..., seq_slice, dim_slice]
+    # [B, T, 132] -> [B, T, 22, 6]
+    x_rot6d = x[..., seq_slice, dim_slice].reshape(
+        *x[..., seq_slice, dim_slice].shape[:-1], -1, 6
+    )
+    y_rot6d = y[..., seq_slice, dim_slice].reshape(
+        *y[..., seq_slice, dim_slice].shape[:-1], -1, 6
+    )
+
+    # 6D -> rotation matrix
+    R_pred = data_utils.matrix6D_to_9D_torch(x_rot6d)
+    R_gt = data_utils.matrix6D_to_9D_torch(y_rot6d)
+
+    # Relative rotation: R_gt^T R_pred
+    R_rel = torch.matmul(
+        R_gt.transpose(-1, -2),
+        R_pred
+    )
+
+    # cos(theta) = (trace(R_rel) - 1) / 2
+    trace = R_rel.diagonal(dim1=-2, dim2=-1).sum(-1)
+    cos_theta = (trace - 1.0) / 2.0
+
+    # numerical safety
+    cos_theta = torch.clamp(cos_theta, -1.0, 1.0)
+
+    # rotation loss
+    loss = 1.0 - cos_theta
+
     if weights is not None:
-        delta = delta * weights[..., None]
-    return torch.mean(torch.abs(delta))
+        loss = loss * weights[..., None]
+
+    return torch.mean(loss)
+    
 
 
 def cal_c_loss(c_gt, c_out, seq_slice, weights=None):
